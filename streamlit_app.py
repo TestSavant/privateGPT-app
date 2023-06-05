@@ -27,7 +27,7 @@ def main():
     # Document upload section
     st.header("Document Upload")
     files = st.file_uploader("Upload document", accept_multiple_files=True)
-    # collection_name = st.text_input("Collection Name") not working for some reason
+    #collection_name = st.text_input("Collection Name") #not working for some reason
     if st.button("Embed"):
         embed_documents(files, "collection_name")
     

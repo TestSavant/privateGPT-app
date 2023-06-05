@@ -20,7 +20,7 @@ from langchain.document_loaders import (
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import Chroma
-from langchain.embeddings import HuggingFaceEmbeddings
+from langchain.embeddings import HuggingFaceEmbeddings, HuggingFaceInstructEmbeddings
 from langchain.docstore.document import Document
 from constants import CHROMA_SETTINGS
 
@@ -86,7 +86,10 @@ def main(collection):
     print(f"Split into {len(texts)} chunks of text (max. {chunk_size} characters each)")
 
     # Create embeddings
-    embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name)
+    # embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name)
+    device='cuda'
+    embeddings = HuggingFaceInstructEmbeddings(model_name="hkunlp/instructor-xl",
+                                                model_kwargs={"device": device})
     
     # Create and store locally vectorstore
     db = Chroma.from_documents(texts, embeddings, collection_name=collection, persist_directory=persist_directory, client_settings=CHROMA_SETTINGS)

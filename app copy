@@ -1,16 +1,16 @@
 from dotenv import load_dotenv
 from langchain.chains import RetrievalQA
-from langchain.embeddings import HuggingFaceInstructEmbeddings
+from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain.vectorstores import Chroma
-from langchain.llms import HuggingFacePipeline, GPT4All, LlamaCpp
+from langchain.llms import GPT4All, LlamaCpp, HuggingFacePipeline
 import os
 from fastapi import FastAPI, UploadFile, File
 from typing import List, Optional
 import urllib.parse
+from constants import CHROMA_SETTINGS
 import transformers
 from transformers import LlamaTokenizer, LlamaForCausalLM, pipeline
-
 
 app = FastAPI()
 
@@ -25,51 +25,47 @@ model_path = os.environ.get('MODEL_PATH')
 model_n_ctx = os.environ.get('MODEL_N_CTX')
 source_directory = os.environ.get('SOURCE_DIRECTORY', 'source_documents')
 
-from constants import CHROMA_SETTINGS
-
-
 def load_model():
-    """
-    Select a model on huggingface.
-    If you are running this for the first time, it will download a model for you.
-    subsequent runs will use the model from the disk.
-    """
+    '''
+    Select a model on huggingface. 
+    If you are running this for the first time, it will download a model for you. 
+    subsequent runs will use the model from the disk. 
+    '''
     model_id = "TheBloke/vicuna-7B-1.1-HF"
     tokenizer = LlamaTokenizer.from_pretrained(model_id)
 
     model = LlamaForCausalLM.from_pretrained(model_id,
-                                             #   load_in_8bit=True, # set these options if your GPU supports them!
-                                             #   device_map=1#'auto',
-                                             #   torch_dtype=torch.float16,
-                                             #   low_cpu_mem_usage=True
-                                             )
+                                            #   load_in_8bit=True, # set these options if your GPU supports them!
+                                            #   device_map=1#'auto',
+                                            #   torch_dtype=torch.float16,
+                                            #   low_cpu_mem_usage=True
+                                              )
 
     pipe = pipeline(
         "text-generation",
-        model=model,
-        tokenizer=tokenizer,
+        model=model, 
+        tokenizer=tokenizer, 
         max_length=2048,
         temperature=0,
         top_p=0.95,
         repetition_penalty=1.15
     )
-
     local_llm = HuggingFacePipeline(pipeline=pipe)
 
     return local_llm
 
-# async def test_embedding():
-#     # Create the folder if it doesn't exist
-#     os.makedirs(source_directory, exist_ok=True)
-#     # Create a sample.txt file in the source_documents directory
-#     file_path = os.path.join("source_documents", "test.txt")
-#     with open(file_path, "w") as file:
-#         file.write("This is a test.")
-#     # Run the ingest.py command
-#     os.system('python ingest.py --collection test')
-#     # Delete the sample.txt file
-#     os.remove(file_path)
-#     print("embeddings working")
+async def test_embedding():
+    # Create the folder if it doesn't exist
+    os.makedirs(source_directory, exist_ok=True)
+    # Create a sample.txt file in the source_documents directory
+    file_path = os.path.join("source_documents", "test.txt")
+    with open(file_path, "w") as file:
+        file.write("This is a test.")
+    # Run the ingest.py command
+    os.system('python ingest.py --collection test')
+    # Delete the sample.txt file
+    os.remove(file_path)
+    print("embeddings working")
 
 async def model_download():
     match model_type:
@@ -97,7 +93,7 @@ async def model_download():
 # Starting the app with embedding and llm download
 @app.on_event("startup")
 async def startup_event():
-  #  await test_embedding()
+    await test_embedding()
     await model_download()
 
 
@@ -132,20 +128,21 @@ async def embed(files: List[UploadFile], collection_name: Optional[str] = None):
 @app.post("/retrieve")
 async def query(query: str, collection_name:str):
     
-    embeddings = HuggingFaceInstructEmbeddings(model_name=embeddings_model_name)
+    embeddings = HuggingFaceEmbeddings(model_name=embeddings_model_name)
     db = Chroma(persist_directory=persist_directory,collection_name=collection_name, embedding_function=embeddings, client_settings=CHROMA_SETTINGS)
     retriever = db.as_retriever()
     # Prepare the LLM
-    # callbacks = [StreamingStdOutCallbackHandler()]
-    # match model_type:
-    #     case "LlamaCpp":
-    #         llm = LlamaCpp(model_path=model_path, n_ctx=model_n_ctx, callbacks=callbacks, verbose=False)
-    #     case "GPT4All":
-    #         llm = GPT4All(model=model_path, n_ctx=model_n_ctx, backend='gptj', callbacks=callbacks, verbose=False)
-    #     case _default:
-    #         print(f"Model {model_type} not supported!")
-    #         exit;
-    llm=load_model()
+    callbacks = [StreamingStdOutCallbackHandler()]
+    match model_type:
+        case "LlamaCpp":
+            llm = LlamaCpp(model_path=model_path, n_ctx=model_n_ctx, callbacks=callbacks, verbose=False)
+        case "GPT4All":
+            llm = GPT4All(model=model_path, n_ctx=model_n_ctx, backend='gptj', callbacks=callbacks, verbose=False)
+        case "Vicuna":
+            llm = load_model()    
+        case _default:
+            print(f"Model {model_type} not supported!")
+            exit;
     qa = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever, return_source_documents=True)
     
     # Get the answer from the chain
